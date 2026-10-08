@@ -1,0 +1,39 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>ZCode 底部增强工具栏验证</title>
+<style>body{margin:0;background:#171717;color:#ccc;font:14px system-ui;--color-popover:#282828;--color-foreground:#ddd}main{max-width:680px;margin:100px auto}form{border:1px solid #444;border-radius:18px;padding:12px;background:#292929}[contenteditable]{min-height:62px;outline:none;color:#ddd}p{margin:0}.toolbar{display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:12px}.leading{display:flex;align-items:center;gap:8px}button:hover{background:#ffffff10!important}button:focus-visible,select:focus-visible{outline:2px solid #999;outline-offset:2px}#checks{white-space:pre-wrap;color:#999;font-size:12px;margin-top:24px}header{padding:12px;color:#888}button,select{font-family:inherit}</style>
+<main><header>▱ test　⌄　　⑂ master　⌄</header><div id="mount"></div><div id="checks">正在加载新版原生编辑器…</div></main>
+<script type="module">
+import {__wbUITest as A} from './assets/styles-DyAcaLKy.js';
+import {A as client} from './assets/toast-q6BVfrvy.js';
+import {createEnhanceComponent,plainDocument} from './assets/enhancer.mjs';
+const h=A.jsx;
+const services={zcodeSessionService:{readWorkspaceState:async()=>({settings:{model:{current:{providerId:'mock',modelId:'mock-test'}}}})},zcodeAgentService:{generateWorkspaceText:async()=>{await new Promise(r=>setTimeout(r,700));return {text:'请优化网页布局、间距和文字层级，并验证移动端显示。'};}}};
+const Component=createEnhanceComponent({...A,useServices:()=>services});
+function App(){return h('form',{onSubmit:e=>e.preventDefault(),children:[h(A.Composer,{initialConfig:{namespace:'toolbar-test',onError:e=>{throw e;},editorState:JSON.stringify(plainDocument('把这个网页做好看一点'))},children:[h(A.Input,{contentEditable:h(A.ContentEditable,{'data-testid':'draft'}),ErrorBoundary:({children})=>children}),h(A.History,{}),h(Component,{workspacePath:'mock-test',taskId:'mock-task',disabled:false})]}),h('div',{className:'toolbar',children:[h('div',{className:'leading','data-composer-leading-content':true,children:[h('span',{children:'＋'}),h('span',{style:{color:'#eb9500'},children:'♧ 完全访问 ⌄'})]}),h('span',{children:'GLM-5.3-Flash ⌄　♧ 最高 ⌄　⬆'})]})]});}
+client().createRoot(document.getElementById('mount')).render(h(App,{}));
+const log=document.getElementById('checks');
+const pause=ms=>new Promise(r=>setTimeout(r,ms));
+const check=(name,pass)=>{if(!pass)throw Error(name);log.textContent+='\nPASS '+name;};
+await pause(800);
+try{
+ log.textContent='新版原生 React/Lexical + 模拟模型';
+ const button=Array.from(document.querySelectorAll('button')).find(e=>e.textContent==='✧ 增强');
+ check('增强按钮挂在底部工具栏',!!button?.closest('[data-composer-leading-content]'));
+ check('模式选择默认收起',document.querySelector('select')===null);
+ button.click();await pause(100);
+ const spinner=document.querySelector('.wb-enhance-spinner');
+ check('请求进行中显示加载圆环与增强中',!!spinner&&button.textContent==='增强中');
+ const rotation=getComputedStyle(spinner).transform;
+ await pause(150);
+ check('加载圆环实际旋转',getComputedStyle(spinner).transform!==rotation);
+ await pause(650);
+ check('完成后加载动画消失',!document.querySelector('.wb-enhance-spinner'));
+ check('增强回填到原生输入框',document.querySelector('[contenteditable]').textContent==='请优化网页布局、间距和文字层级，并验证移动端显示。');
+ document.querySelector('[aria-label="增强设置和结果"]').click();await pause(100);
+ check('设置在弹出面板，不占输入框高度',document.querySelector('[role=dialog]')?.parentNode===document.body);
+ const undo=Array.from(document.querySelectorAll('button')).find(e=>e.textContent==='↶ 撤销增强');
+ undo.click();await pause(300);
+ check('撤销恢复原稿',document.querySelector('[contenteditable]').textContent==='把这个网页做好看一点');
+ document.querySelector('[aria-label="关闭增强面板"]').click();
+ log.textContent+='\n全部 8 项通过。';
+}catch(e){log.textContent+='\nFAIL '+e.message;}
+</script></html>

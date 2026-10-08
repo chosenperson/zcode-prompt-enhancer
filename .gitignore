@@ -1,0 +1,11 @@
+out/
+__pycache__/
+*.py[cod]
+*.asar
+*.asar.unpacked/
+*.zip
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db

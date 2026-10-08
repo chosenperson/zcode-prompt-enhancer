@@ -1,0 +1,89 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>ZCode 增强模型选择验证</title>
+<style>body{margin:0;background:#171717;color:#ddd;font:14px system-ui;--color-popover:#282828;--color-foreground:#ddd}main{max-width:720px;margin:70px auto}header{color:#999;margin-bottom:18px}form{border:1px solid #444;border-radius:18px;padding:16px;background:#292929}[contenteditable]{min-height:72px;outline:none}p{margin:0}.toolbar{display:flex;justify-content:space-between;align-items:center;margin-top:12px}.leading{display:flex;align-items:center;gap:8px}button,select{font-family:inherit}#checks{white-space:pre-wrap;color:#999;font-size:12px;line-height:1.55;margin-top:24px;max-height:360px;overflow:auto}button:focus-visible,select:focus-visible{outline:2px solid #999}</style>
+<main><header>ZCode 3.14.4 原生编辑器 · 模型选择隔离验证（模拟服务）</header><div id="mount"></div><div id="checks">正在加载…</div></main>
+<script type="module">
+import {__wbUITest as A} from './assets/styles-DyAcaLKy.js';
+import {A as client} from './assets/toast-q6BVfrvy.js';
+import {createEnhanceComponent,plainDocument,modelChoiceKey,modelPreferenceKey} from './assets/enhancer.mjs';
+const h=A.jsx,pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const workspaceA='wb-picker-test-a',workspaceB='wb-picker-test-b';
+const defaultModel={providerId:'mock',modelId:'Large',options:{reasoningLevel:'high'}};
+const fastModel={providerId:'mock',modelId:'Flash',options:{reasoningLevel:'none'}};
+const makeModel=(modelId,values)=>({modelId,config:{optionSpecs:{reasoningLevel:{values}}}});
+const fullProviders=[{providerId:'mock',providerName:'测试供应商',models:[makeModel('Large',['low','high']),makeModel('Flash',['high','none','low'])]},
+  {providerId:'second',providerName:'另一供应商',models:[makeModel('Flash',['low','high'])]}];
+let providers=fullProviders,failCatalog=false,calls=[],generation=0;
+const subscribers=new Set();
+const services={modelSelectionService:{getView:async()=>{await pause(20);if(failCatalog)throw Error('private service detail');return {preferredSelection:defaultModel,providers};},
+  onDidChange:callback=>{subscribers.add(callback);return {dispose:()=>subscribers.delete(callback)};}},
+  zcodeSessionService:{readWorkspaceState:async()=>({settings:{model:{current:defaultModel}}})},
+  zcodeAgentService:{generateWorkspaceText:async request=>{calls.push(request);await pause(450);return {text:`增强结果 ${calls.length}：请说明修改目标和验证方式。`};}}};
+const Component=createEnhanceComponent({...A,useServices:()=>services});
+function App({workspacePath,generation}){return h('form',{'data-test-generation':generation,onSubmit:e=>e.preventDefault(),children:[
+  h(A.Composer,{initialConfig:{namespace:'model-picker-test',onError:e=>{throw e;},editorState:JSON.stringify(plainDocument('请改善这个页面'))},children:[
+    h(A.Input,{contentEditable:h(A.ContentEditable,{'data-testid':'draft'}),ErrorBoundary:({children})=>children}),h(A.History,{}),h(Component,{workspacePath,taskId:'test-task',disabled:false})]}),
+  h('div',{className:'toolbar',children:[h('div',{className:'leading','data-composer-leading-content':true,children:[h('span',{children:'＋'}),h('span',{children:'完全访问 ⌄'})]}),h('span',{children:'聊天模型：Large · 高'})]})]});}
+const root=client().createRoot(document.getElementById('mount'));
+const mount=async workspacePath=>{const key=++generation;root.render(h(App,{workspacePath,generation:key},key));await until(()=>document.querySelector('form')?.dataset.testGeneration===String(key) && !!findButton('✧ 增强'));};
+const log=document.getElementById('checks');let passed=0;
+const check=(label,value)=>{if(!value)throw Error(label);passed++;log.textContent+=`\nPASS ${label}`;};
+const until=async predicate=>{for(let i=0;i<150;i++){if(predicate())return;await pause(20);}throw Error('等待界面状态超时');};
+const findButton=text=>Array.from(document.querySelectorAll('button')).find(button=>button.textContent===text);
+const picker=()=>document.querySelector('[aria-label="增强模型"]');
+const thought=()=>document.querySelector('[aria-label="增强思考强度"]');
+const input=()=>document.querySelector('[contenteditable]');
+const select=async(element,value)=>{element.value=value;element.dispatchEvent(new Event('change',{bubbles:true}));await pause(30);};
+const openPanel=async()=>{document.querySelector('[aria-label="增强设置和结果"]').click();await until(()=>picker() && !picker().disabled);};
+const enhance=async()=>{findButton('✧ 增强').click();await until(()=>!!document.querySelector('.wb-enhance-spinner'));};
+const finished=async()=>{await until(()=>!!findButton('✧ 增强'));await pause(40);};
+const changed=()=>{for(const callback of subscribers)callback();};
+try {
+  localStorage.removeItem(modelPreferenceKey({workspacePath:workspaceA}));
+  localStorage.removeItem(modelPreferenceKey({workspacePath:workspaceB}));
+  await mount(workspaceA);
+  log.textContent='真实 React/Lexical + 模拟模型';
+  if(A.modelProtocol!=='selection')throw Error('该验证页需要 3.14.x 原生模型接口');
+  await openPanel();
+  check('默认跟随工作区模型',picker().value==='');
+  check('按供应商分组显示所有可选模型',picker().querySelectorAll('optgroup').length===2 && picker().options.length===4);
+  await select(picker(),modelChoiceKey(fastModel));
+  check('新选 Flash 自动使用它支持的最低思考强度',thought()?.value==='none');
+  await select(thought(),'low');
+  check('选择持久化为模型标识与思考值',JSON.parse(localStorage.getItem(modelPreferenceKey({workspacePath:workspaceA}))).options.reasoningLevel==='low');
+  await enhance();
+  check('增强过程中锁定模型与思考选择',picker().disabled && thought().disabled);
+  await finished();
+  check('请求使用增强专用模型和思考强度',calls.at(-1)?.selection?.modelId==='Flash' && calls.at(-1).selection.options.reasoningLevel==='low' && !calls.at(-1).modelRef);
+  check('请求保留工作区范围',calls.at(-1).workspacePath===workspaceA);
+  check('工作区聊天默认模型未改',defaultModel.modelId==='Large' && defaultModel.options.reasoningLevel==='high');
+  check('增强结果回填到原生编辑器',input().textContent.startsWith('增强结果 1'));
+  findButton('↶ 撤销增强').click();await until(()=>input().textContent==='请改善这个页面');
+  check('选择模型后仍能原生撤销',input().textContent==='请改善这个页面');
+  await mount(workspaceA);await openPanel();
+  check('重新挂载后恢复模型和思考强度',picker().value===modelChoiceKey(fastModel) && thought().value==='low');
+  await mount(workspaceB);await openPanel();
+  check('另一个工作区使用独立选择',picker().value==='');
+  await mount(workspaceA);await openPanel();
+  providers=[{providerId:'mock',providerName:'测试供应商',models:[makeModel('Large',['low','high'])]}];changed();
+  await until(()=>!picker().disabled && picker().selectedOptions[0]?.textContent.includes('已不可用'));
+  const countBeforeMissing=calls.length,originalText=input().textContent;
+  findButton('✧ 增强').click();await until(()=>document.querySelector('[role=status]')?.textContent.includes('增强模型已不可用'));
+  check('已移除模型不会静默退回默认或发送请求',calls.length===countBeforeMissing && input().textContent===originalText);
+  check('失效模型仍明确显示原选择',picker().value===modelChoiceKey(fastModel));
+  providers=fullProviders;changed();await until(()=>!picker().disabled && picker().querySelectorAll('optgroup').length===2);
+  await select(picker(),'');await enhance();await finished();
+  check('可恢复跟随原生默认模型和高思考设置',calls.at(-1).selection.modelId==='Large' && calls.at(-1).selection.options.reasoningLevel==='high');
+  check('跟随默认会清除增强模型覆盖',localStorage.getItem(modelPreferenceKey({workspacePath:workspaceA}))===null);
+  failCatalog=true;findButton('刷新模型列表').click();await until(()=>document.querySelector('[role=dialog]')?.textContent.includes('模型列表读取失败'));
+  check('模型列表失败可重试且不显示服务原始错误',!findButton('刷新模型列表').disabled && !document.querySelector('[role=dialog]').textContent.includes('private service detail'));
+  failCatalog=false;findButton('刷新模型列表').click();await until(()=>!picker().disabled && picker().querySelectorAll('optgroup').length===2);
+  check('模型列表重试恢复',picker().options.length===4);
+  await select(picker(),modelChoiceKey(fastModel));
+  const beforeCancel=input().textContent;
+  await enhance();findButton('增强中').click();await finished();
+  check('自选模型仍支持停止等待并保护草稿',input().textContent===beforeCancel);
+  check('请求结束后加载动画清除',!document.querySelector('.wb-enhance-spinner'));
+  log.textContent+=`\n全部 ${passed} 项通过。`;
+  document.body.dataset.tests='passed';document.body.dataset.checkCount=String(passed);
+} catch(error){log.textContent+='\nFAIL '+error.message;document.body.dataset.tests='failed';}
+</script></html>
